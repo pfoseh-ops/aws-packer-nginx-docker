@@ -1,0 +1,20 @@
+#cloud-config
+# Cloud-init user data script to start Nginx Docker container on EC2 launch
+# This ensures Nginx is running immediately after instance boot
+
+package_upgrade: true
+
+runcmd:
+  - echo "Starting Nginx Docker container at $(date)" >> /var/log/nginx-startup.log
+  - systemctl start nginx-docker.service
+  - sleep 2
+  - docker ps | grep nginx-server && echo "Nginx container is running" >> /var/log/nginx-startup.log || echo "WARNING: Nginx container failed to start" >> /var/log/nginx-startup.log
+
+write_files:
+  - path: /var/log/nginx-startup.log
+    permissions: '0644'
+    content: "Nginx Docker container startup log\n"
+
+final_message: |
+  Cloud-init finished at $TIMESTAMP after $UPTIME seconds.
+  Nginx is now serving traffic on port 80.
