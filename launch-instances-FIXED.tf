@@ -18,7 +18,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  
+
   # Uncomment for remote state management
   # backend "s3" {
   #   bucket         = "my-terraform-state"
@@ -31,17 +31,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  
-  default_tags {
-    tags = {
-      Project     = var.project
-      Environment = var.environment
-      Owner       = var.owner
-      CostCenter  = var.cost_center
-      CreatedBy   = "Terraform"
-      CreatedAt   = timestamp()
-    }
-  }
+
 }
 
 # ============================================================================
@@ -52,7 +42,7 @@ variable "aws_region" {
   type        = string
   default     = "us-east-1"
   description = "AWS region for deployment"
-  
+
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-\\d{1}$", var.aws_region))
     error_message = "AWS region must be a valid region format (e.g., us-east-1)"
@@ -74,7 +64,7 @@ variable "subnet_id" {
 variable "ami_id" {
   type        = string
   description = "AMI ID from Packer build (e.g., ami-xxxxxxxxx)"
-  
+
   validation {
     condition     = can(regex("^ami-[a-z0-9]{17}$|^ami-[a-z0-9]{8}$", var.ami_id))
     error_message = "AMI ID must be valid format (ami-xxxxxxxxxxxxxxxx or ami-xxxxxxxx)"
@@ -85,7 +75,7 @@ variable "instance_type" {
   type        = string
   default     = "t3.micro"
   description = "EC2 instance type"
-  
+
   validation {
     condition = contains([
       "t3.nano", "t3.micro", "t3.small", "t3.medium", "t3.large",
@@ -100,7 +90,7 @@ variable "instance_count" {
   type        = number
   default     = 1
   description = "Number of instances to launch"
-  
+
   validation {
     condition     = var.instance_count >= 1 && var.instance_count <= 10
     error_message = "Instance count must be between 1 and 10"
@@ -110,7 +100,7 @@ variable "instance_count" {
 variable "key_name" {
   type        = string
   description = "AWS EC2 key pair name for SSH access"
-  
+
   validation {
     condition     = length(var.key_name) > 0
     error_message = "Key pair name cannot be empty"
@@ -119,9 +109,9 @@ variable "key_name" {
 
 variable "ssh_cidr_blocks" {
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # CHANGE THIS to your IP range in production!
+  default     = ["0.0.0.0/0"] # CHANGE THIS to your IP range in production!
   description = "CIDR blocks allowed for SSH (should be restricted in production)"
-  
+
   validation {
     condition = alltrue([
       for cidr in var.ssh_cidr_blocks : can(cidrhost(cidr, 0))
@@ -140,7 +130,7 @@ variable "environment" {
   type        = string
   default     = "dev"
   description = "Environment name (dev, staging, prod)"
-  
+
   validation {
     condition     = contains(["dev", "staging", "prod"], var.environment)
     error_message = "Environment must be dev, staging, or prod"
@@ -156,7 +146,7 @@ variable "project" {
 variable "owner" {
   type        = string
   description = "Owner email for notifications and tagging"
-  
+
   validation {
     condition     = can(regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", var.owner))
     error_message = "Owner must be a valid email address"
@@ -195,7 +185,7 @@ data "aws_subnets" "available" {
     name   = "vpc-id"
     values = [data.aws_vpc.selected.id]
   }
-  
+
   filter {
     name   = "availability-zone"
     values = ["${var.aws_region}a", "${var.aws_region}b"]
@@ -210,7 +200,7 @@ resource "aws_security_group" "nginx" {
   name_prefix = "nginx-docker-"
   description = "Security group for Nginx Docker instances"
   vpc_id      = data.aws_vpc.selected.id
-  
+
   # HTTP
   ingress {
     description = "HTTP from specified CIDR blocks"
@@ -219,7 +209,7 @@ resource "aws_security_group" "nginx" {
     protocol    = "tcp"
     cidr_blocks = var.http_cidr_blocks
   }
-  
+
   # HTTPS
   ingress {
     description = "HTTPS from anywhere (for future use)"
@@ -228,7 +218,7 @@ resource "aws_security_group" "nginx" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+
   # SSH - RESTRICTED
   ingress {
     description = "SSH - RESTRICTED (change ssh_cidr_blocks variable!)"
@@ -237,7 +227,7 @@ resource "aws_security_group" "nginx" {
     protocol    = "tcp"
     cidr_blocks = var.ssh_cidr_blocks
   }
-  
+
   # Egress - allow all outbound
   egress {
     description = "Allow all outbound traffic"
@@ -246,11 +236,11 @@ resource "aws_security_group" "nginx" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+
   tags = {
     Name = "${var.project}-${var.environment}-sg"
   }
-  
+
   lifecycle {
     create_before_destroy = true
   }
@@ -261,48 +251,48 @@ resource "aws_security_group" "nginx" {
 # ============================================================================
 
 resource "aws_instance" "nginx" {
-  count                = var.instance_count
-  ami                  = var.ami_id
-  instance_type        = var.instance_type
-  key_name             = var.key_name
-  subnet_id            = var.subnet_id != null ? var.subnet_id : data.aws_subnets.available.ids[count.index % length(data.aws_subnets.available.ids)]
+  count                  = var.instance_count
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  subnet_id              = var.subnet_id != null ? var.subnet_id : data.aws_subnets.available.ids[count.index % length(data.aws_subnets.available.ids)]
   vpc_security_group_ids = [aws_security_group.nginx.id]
-  
+
   # Associate public IP address
   associate_public_ip_address = true
-  
+
   # Enable detailed monitoring
   monitoring = var.enable_monitoring
-  
+
   # IMDSv2 enforcement (security best practice)
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
   }
-  
+
   # Shutdown behavior
   instance_initiated_shutdown_behavior = var.environment == "prod" ? "stop" : "terminate"
-  
+
   # Root volume configuration
   root_block_device {
-    volume_size           = 20
+    volume_size           = 35
     volume_type           = "gp3"
     delete_on_termination = true
     encrypted             = true
   }
-  
+
   tags = {
-    Name = "${var.project}-${var.environment}-${count.index + 1}"
+    Name  = "${var.project}-${var.environment}-${count.index + 1}"
     Index = count.index + 1
   }
-  
+
   # Prevent accidental termination
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes        = [ami]
     create_before_destroy = true
   }
-  
+
   depends_on = [aws_security_group.nginx]
 }
 
@@ -321,12 +311,12 @@ resource "aws_cloudwatch_metric_alarm" "instance_status_check_failed" {
   statistic           = "Maximum"
   threshold           = 1
   alarm_description   = "Alert when instance status check fails"
-  alarm_actions       = []  # Add SNS topic ARN here for notifications
-  
+  alarm_actions       = [] # Add SNS topic ARN here for notifications
+
   dimensions = {
     InstanceId = aws_instance.nginx[count.index].id
   }
-  
+
   tags = {
     Name = "${var.project}-alarm-status"
   }
@@ -343,11 +333,11 @@ resource "aws_cloudwatch_metric_alarm" "cpu_utilization" {
   statistic           = "Average"
   threshold           = 80
   alarm_description   = "Alert when CPU utilization is high"
-  
+
   dimensions = {
     InstanceId = aws_instance.nginx[count.index].id
   }
-  
+
   tags = {
     Name = "${var.project}-alarm-cpu"
   }
@@ -389,13 +379,13 @@ output "security_group_id" {
 
 output "deployment_summary" {
   value = {
-    region              = var.aws_region
-    environment         = var.environment
-    instance_type       = var.instance_type
-    instance_count      = var.instance_count
-    ami_id              = var.ami_id
-    instances_launched  = length(aws_instance.nginx)
-    monitoring_enabled  = var.enable_monitoring
+    region             = var.aws_region
+    environment        = var.environment
+    instance_type      = var.instance_type
+    instance_count     = var.instance_count
+    ami_id             = var.ami_id
+    instances_launched = length(aws_instance.nginx)
+    monitoring_enabled = var.enable_monitoring
   }
   description = "Deployment summary"
 }
@@ -405,7 +395,7 @@ output "deployment_summary" {
 # ============================================================================
 
 output "deployment_instructions" {
-  value = <<-EOT
+  value       = <<-EOT
     
 ╔════════════════════════════════════════════════════════════════════════╗
 ║                    DEPLOYMENT INSTRUCTIONS                             ║
