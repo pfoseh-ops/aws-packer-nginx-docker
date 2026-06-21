@@ -1,6 +1,29 @@
-# Packer Docker + Nginx AMI
+code README.md# AWS Golden AMI with Packer, Docker, Nginx, and Terraform
 
-This Packer configuration builds an Ubuntu AMI with Docker and Nginx pre-installed and automatically configured to start on boot.
+This repository provides a production-ready workflow to build a Golden AMI with Packer, deploy it with Terraform, and run Nginx inside Docker on EC2 instances. The AMI is based on Ubuntu 22.04 LTS and includes a pre-created Docker container and systemd services so instances are immediately serving traffic after launch.
+
+## Architecture
+
+Packer
+→ Custom AMI
+→ Terraform
+→ EC2 Instance
+→ Docker
+→ Nginx Container
+→ Dynamic Metadata Page
+
+## Features
+
+- Ubuntu 22.04 LTS
+- Docker Engine (docker-ce, containerd)
+- Nginx served from a Docker container
+- Systemd service management (nginx-docker.service)
+- Dynamic index.html generation at boot (generate-index.service)
+- IMDSv2 metadata support (token-based metadata retrieval)
+- Terraform deployment examples (launch-instances-FIXED.tf)
+- CloudWatch alarm hooks (Terraform integration)
+- Encrypted gp3 root volume
+- Security group automation and parameterization
 
 ## What's Included
 
@@ -36,17 +59,35 @@ This Packer configuration builds an Ubuntu AMI with Docker and Nginx pre-install
 
 ```bash
 # Initialize Packer (first time only)
-packer init aws-docker.pkr.hcl
+packer init aws-docker-FIXED.pkr.hcl
+
+# Validate template
+packer validate aws-docker-FIXED.pkr.hcl
 
 # Build the AMI
-packer build aws-docker.pkr.hcl
+packer build -var='aws_region=us-east-1' -var='instance_type=t3.small' aws-docker-FIXED.pkr.hcl
 
 # Build with custom variables
 packer build \
   -var="aws_region=us-west-2" \
   -var="instance_type=t3.small" \
-  aws-docker.pkr.hcl
+  aws-docker-FIXED.pkr.hcl
 ```
+
+## Terraform Deployment
+
+Use the provided Terraform configuration to launch instances from the Golden AMI (launch-instances-FIXED.tf):
+
+```bash
+terraform init
+terraform plan
+terraform apply
+
+# When finished
+terraform destroy
+```
+
+
 
 ## Launching EC2 Instances
 
@@ -77,35 +118,49 @@ After launching an instance:
 # SSH into the instance
 ssh -i your-key.pem ubuntu@instance-public-ip
 
-# Check if Nginx Docker container is running
-docker ps | grep nginx-server
+# Check services
+sudo systemctl status nginx-docker.service
+sudo systemctl status generate-index.service
 
-# Check systemd service status
-systemctl status nginx-docker.service
+# Check the Docker container
+sudo docker ps
 
-# Test Nginx connectivity
-curl localhost
+# Verify generated index page
+sudo cat /opt/nginx/html/index.html | head -50
+
+# Test HTTP locally
+curl -i localhost
 # or from outside the instance
 curl http://instance-public-ip
+```
+
+Basic troubleshooting commands:
+
+```bash
+sudo journalctl -u nginx-docker.service -n 100 --no-pager
+sudo journalctl -u generate-index.service -n 100 --no-pager
+sudo docker logs nginx-server
 ```
 
 ## File Structure
 
 ```
 .
-├── aws-docker.pkr.hcl       # Main Packer HCL configuration
-├── cloud-init-nginx.yaml    # Cloud-init user data script
-├── dockerfile               # Original Dockerfile (optional reference)
-└── README.md               # This file
+├── aws-docker-FIXED.pkr.hcl    # Final Packer template (production-ready)
+├── launch-instances-FIXED.tf   # Terraform example to launch EC2 instances
+├── cloud-init-nginx.yaml       # Cloud-init user data script (optional)
+├── README.md                   # This file
+└── scripts/                    # helper scripts (generate-index.sh, etc.)
 ```
 
 ## Customization
 
 ### Change Nginx Configuration
-Edit the systemd service in the Packer config (line ~103):
+Edit the systemd service in the Packer config (line ~103). The production template starts a pre-created container, so the unit uses `docker start`:
 ```hcl
-ExecStart=/usr/bin/docker run --rm --name nginx-server -p 80:80 -v /opt/nginx/html:/usr/share/nginx/html:ro nginx:latest
+ExecStart=/usr/bin/docker start -a nginx-server
 ```
+To use a custom image, update the AMI build steps to `docker pull` and `docker create` with your image name (so the AMI contains the created container), or modify the unit to `docker run` if you prefer the instance to pull/run the image at boot (not recommended for air-gapped or immutable AMIs).
 
 ### Serve Custom Content
 Add your HTML files to `/opt/nginx/html/` on the EC2 instance:
@@ -148,3 +203,33 @@ sudo systemctl status docker
 ---
 
 **Built with Packer** | Ubuntu 22.04 LTS | Docker | Nginx
+
+## Lessons Learned
+
+### IMDSv2
+Retrieving instance metadata requires token-based calls when IMDSv2 is enforced. The generate-index script is written to request metadata using short timeouts and to handle failures gracefully when metadata is not available.
+
+### Root Volume Sizing
+Terraform root volume sizes must be at least as large as the AMI snapshot. Under-provisioning the root volume can cause EC2 launch failures.
+
+### Terraform Provider Tags
+Setting provider-level `default_tags` with dynamic values (for example `timestamp()`) caused inconsistent plan diffs during development. Prefer resource-level tags for predictable plans.
+
+## Future Enhancements
+
+- Application Load Balancer (ALB) in front of instances
+- ACM-managed HTTPS certificates
+- Route53 DNS and health checks
+- Auto Scaling Groups with lifecycle hooks and warm pools
+- GitHub Actions for automated AMI builds and releases
+- Host Docker images in ECR instead of baking large images into AMIs
+- SNS or third-party alerting for CloudWatch alarms
+
+## Author
+
+Paul Foseh
+DevOps Engineer | Cloud Automation | Infrastructure as Code
+
+---
+
+**Status:** Production-ready Golden AMI setup (Ubuntu 22.04, Docker, Nginx, dynamic metadata page)
