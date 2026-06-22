@@ -1,4 +1,9 @@
-code README.md# AWS Golden AMI with Packer, Docker, Nginx, and Terraform
+# AWS Golden AMI with Packer, Docker, Nginx, and Terraform
+
+![AWS](https://img.shields.io/badge/AWS-EC2-orange)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-purple)
+![Packer](https://img.shields.io/badge/Packer-Golden_AMI-blue)
+![Docker](https://img.shields.io/badge/Docker-Nginx-blue)
 
 This repository provides a production-ready workflow to build a Golden AMI with Packer, deploy it with Terraform, and run Nginx inside Docker on EC2 instances. The AMI is based on Ubuntu 22.04 LTS and includes a pre-created Docker container and systemd services so instances are immediately serving traffic after launch.
 
@@ -24,6 +29,16 @@ Packer
 - CloudWatch alarm hooks (Terraform integration)
 - Encrypted gp3 root volume
 - Security group automation and parameterization
+
+## Project Outcome
+
+✅ Successfully built a custom AWS Golden AMI using Packer
+✅ Installed and configured Docker automatically
+✅ Created and managed an Nginx container through systemd
+✅ Implemented dynamic metadata page generation at boot
+✅ Deployed infrastructure using Terraform
+✅ Configured CloudWatch monitoring and alarms
+✅ Validated end-to-end deployment on AWS EC2
 
 ## What's Included
 
@@ -214,6 +229,48 @@ Terraform root volume sizes must be at least as large as the AMI snapshot. Under
 
 ### Terraform Provider Tags
 Setting provider-level `default_tags` with dynamic values (for example `timestamp()`) caused inconsistent plan diffs during development. Prefer resource-level tags for predictable plans.
+
+## Issues Encountered and Resolved
+
+### Packer Shell Compatibility
+
+Provisioning initially failed because some shell features were not supported by the execution environment. The default shell was `/bin/sh` (dash), which does not support Bash-specific features like `pipefail`. Scripts were updated to explicitly use `/bin/bash` via the `execute_command` attribute in shell provisioners.
+
+```hcl
+provisioner "shell" {
+  execute_command = "bash -c '{{ .Vars }} {{ .Path }}'"
+  inline = [
+    "set -euo pipefail",
+    # ... commands
+  ]
+}
+```
+
+### IMDSv2 Metadata Retrieval
+
+Instance metadata calls initially returned empty values because Terraform enforced IMDSv2. Token-based metadata requests were implemented in the generate-index script with proper timeouts and fallback handling.
+
+```bash
+TOKEN=$(curl -s -X PUT \
+"http://169.254.169.254/latest/api/token" \
+-H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+INSTANCE_ID=$(curl -s \
+-H "X-aws-ec2-metadata-token: $TOKEN" \
+http://169.254.169.254/latest/meta-data/instance-id)
+
+AVAILABILITY_ZONE=$(curl -s \
+-H "X-aws-ec2-metadata-token: $TOKEN" \
+http://169.254.169.254/latest/meta-data/placement/availability-zone)
+```
+
+### Terraform Provider Tagging Issue
+
+Provider-level `default_tags` combined with `timestamp()` caused inconsistent final plan errors during `terraform apply`. The provider configuration was simplified and resource-level tags were retained to eliminate plan drift.
+
+### Root Volume Sizing
+
+Terraform attempted to launch an EC2 instance with a root volume smaller than the AMI snapshot size, causing launch failures. The root volume was increased to at least 30GB to meet AWS requirements and accommodate Docker images.
 
 ## Future Enhancements
 
