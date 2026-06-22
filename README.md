@@ -286,8 +286,6 @@ Terraform attempted to launch an EC2 instance with a root volume smaller than th
 
 **Paul Foseh**
 
-DevOps Engineer specializing in Cloud Infrastructure, Infrastructure as Code, Automation, CI/CD, Kubernetes, and Platform Engineering.
-
 DevOps & Cloud Engineer  | Infrastructure as Code | Automation | CI/CD | Kubernetes & Platform Engineering
 
 ---
