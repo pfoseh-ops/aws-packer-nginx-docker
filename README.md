@@ -32,13 +32,13 @@ Packer
 
 ## Project Outcome
 
-✅ Successfully built a custom AWS Golden AMI using Packer
-✅ Installed and configured Docker automatically
-✅ Created and managed an Nginx container through systemd
-✅ Implemented dynamic metadata page generation at boot
-✅ Deployed infrastructure using Terraform
-✅ Configured CloudWatch monitoring and alarms
-✅ Validated end-to-end deployment on AWS EC2
+- ✅ Successfully built a custom AWS Golden AMI using Packer
+- ✅ Installed and configured Docker automatically
+- ✅ Created and managed an Nginx container through systemd
+- ✅ Implemented dynamic metadata page generation at boot
+- ✅ Deployed infrastructure using Terraform
+- ✅ Configured CloudWatch monitoring and alarms
+- ✅ Validated end-to-end deployment on AWS EC2
 
 ## What's Included
 
